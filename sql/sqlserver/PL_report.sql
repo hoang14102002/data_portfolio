@@ -1,3 +1,10 @@
+/*Problem:
+Calculate P&L (Profit & Loss) metrics for each business unit. The metrics are defined in the MAP_PL_QUAN_TRI_FORMULA table, including metric code, metric name, and calculation logic.
+
+Solution:
+A looping stored procedure was implemented to calculate each metric by business unit and insert the results into the RESULT_PL_KHOI_QT table.
+*/
+
 USE [MIS_DEV]
 GO
 /****** Object:  StoredProcedure [dbo].[SP_REPORT_PL_KHOI_QT]    Script Date: 9/23/2025 11:53:44 AM ******/
