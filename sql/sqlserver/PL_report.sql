@@ -14,29 +14,23 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 ALTER PROCEDURE [dbo].[SP_REPORT_PL_KHOI_QT]
-	--@FDATE DATE = NULL, --Tu ngay
-	@TDATE DATE = '2025-07-27' --Den ngay
+	@TDATE DATE = '2025-07-27' -- to what date
 AS
 BEGIN
 	SET NOCOUNT ON
 
-	--DECLARE @TDATE_TT DATE --Ngay cuoi thang truoc
-	--SET @TDATE_TT = DATEADD(DAY, -DAY(@TDATE),@TDATE)
-
-	--IF @FDATE IS NULL 
-	--	SET @FDATE = FORMAT(@TDATE,'yyyy-01-01')
-
 	DECLARE @STR_EXEC NVARCHAR(MAX) = ''
-
+	
+	-- HoangDM: i list all branch i have to calculate in PL report:
 	DROP TABLE IF EXISTS #LIST_BRANCH
-
+	
 	SELECT DISTINCT 'VN0010' + BRANCH_CODE AS BRANCH_CODE, CAST(0 AS INT) AS INSERTED
 	INTO #LIST_BRANCH
 	FROM [MIS_DB ].[APPS].[STAG_GL_ORS_PL] WHERE REPORT_DATE = @TDATE
-
-	--delete from #LIST_BRANCH
-	--where BRANCH_CODE <> 'vn0010001'
 	------------------------------------------------------------------------------------------------------------------
+	-- HoangDM: i'll take all the criteria that need to be calculated. 
+	-- HoangDM: i create a filed name 'INSERTED' to define what criteria was calculated
+	
 	DROP TABLE IF EXISTS #FOMULA 
 
 	SELECT *, CAST(0 AS INT) AS INSERTED 
@@ -72,17 +66,11 @@ BEGIN
 	CREATE NONCLUSTERED INDEX BRANCH_CODE ON #DATA_PL (BRANCH_CODE);
 	CREATE NONCLUSTERED INDEX KPI_CODE ON #DATA_PL (KPI_CODE);
 	------------------------------------------------------------------------------------------------------------------
+	-- HoangDM: I collected data from 3 sources and cleaned them.
+
+	-- HoangDM: several data are storaged in a server maintain by DE team, so i have to use Linkedserver to connect and get data from that server
 	--TOI DATA:
 	DROP TABLE IF EXISTS ##DATA_TOI
-
-	--SELECT T.MA_CN AS BRANCH_CODE, T.KHOI AS DIVISION_CODE,
-	--	SUM(T.THULAI_KH_A) AS THULAI_KH_A, SUM(CHILAI_FTP_B) AS CHILAI_FTP_B, SUM(T.CHI_DP_F) AS CHI_DP_F 
-	--INTO ##DATA_TOI
-	--FROM [MIS_DB ].[APPS].[REP_TOI_FINAL_MONTH_LK] T
-	--	INNER JOIN MASTER_DATA.DBO.DIM_BAD_BOOK V on T.MAKH = V.T24_CUSTOMER_ID and [Phân loại] != 'No tiem an'
-	--WHERE TRANSACTION_DATE = @TDATE_TT AND T.KHOI IN('INDIV','SME','CIB','FI')
-	--GROUP BY T.MA_CN, T.KHOI	
-
 	--HoangDM: Lay truc tiep Data TOI tu FTP 
 	SET @STR_EXEC = N'
 		SELECT TRIM(T.MA_CN) AS BRANCH_CODE, T.KHOI AS DIVISION_CODE,
@@ -108,15 +96,6 @@ BEGIN
 	------------------------------------------------------------------------------------------------------------------
 	--NIM DATA
 	DROP TABLE IF EXISTS ##DATA_NIM
-	--SELECT T1.CN AS BRANCH_CODE, T1.KHOI AS DIVISION_CODE,
-	--	SUM(REAL_INTEREST_VND) AS REAL_INTEREST_VND, SUM(INTEREST_FTP_VND) AS INTEREST_FTP_VND
-	--INTO ##DATA_NIM
-	--FROM ftp1_linked..APPS.AGG_NIM_M T1
-	--	INNER JOIN MASTER_DATA.DBO.DIM_PVI_SBIC T2 ON T1.TAIKHOAN = T2.ARRANGEMENT_NBR AND T2.PVN_SBIC = 'PVN_SBIC'
-	--WHERE KHOI IN ('INDIV','SME','CIB','FI') AND D_TYPE = 'DEPOSIT'
-	--	AND TRANSACTION_DATE = @TDATE_TT 
-	--GROUP BY T1.CN, T1.KHOI
-
 	--HoangDM: Lay truc tiep Data NIM tu FTP 
 	SET @STR_EXEC = '
 		SELECT T1.CN AS BRANCH_CODE,  T1.KHOI AS DIVISION_CODE,
@@ -153,6 +132,7 @@ BEGIN
 	WHERE TRANSACTION_DATE = @TDATE AND LINE_GL IN ('704000','704100','703900')
 	GROUP BY CNC1, LINE_GL
 	------------------------------------------------------------------------------------------------------------------
+	-- HoangDM: i create a temptable to contains data.
 	DROP TABLE IF EXISTS #RAW_DATA
 
 	CREATE TABLE #RAW_DATA
@@ -166,7 +146,6 @@ BEGIN
 		AMOUNT NUMERIC(38,4)
 	)
 
-
 	--HoangDM: import tay TOI truoc 7/2:
 	DROP TABLE IF EXISTS #TEMP 
 	CREATE TABLE #TEMP	 
@@ -178,9 +157,8 @@ BEGIN
 		INDIV NUMERIC(30,0),
 		FI NUMERIC(30,0),
 		SMEs NUMERIC(30,0)
-
 	)
-
+	-- HoangDM: several missing data is provided by businesss:
 	INSERT INTO #TEMP(BRANCH_CODE, ITEM_CODE, ITEM_NAME, MA_SO, INDIV, FI, SMEs) SELECT 'VN0010001', 'CHI_LAI_HUY_DONG_KH_PVN_SBIC', N'2.1 Chi lãi huy động KH PVN&SBIC', 'A121' , 0, 0, -23063008932.2512 
 	INSERT INTO #TEMP(BRANCH_CODE, ITEM_CODE, ITEM_NAME, MA_SO, INDIV, FI, SMEs) SELECT 'VN0010002', 'CHI_LAI_HUY_DONG_KH_PVN_SBIC', N'2.1 Chi lãi huy động KH PVN&SBIC', 'A121' , 0, 0, -31.0301369863013 
 	INSERT INTO #TEMP(BRANCH_CODE, ITEM_CODE, ITEM_NAME, MA_SO, INDIV, FI, SMEs) SELECT 'VN0010003', 'CHI_LAI_HUY_DONG_KH_PVN_SBIC', N'2.1 Chi lãi huy động KH PVN&SBIC', 'A121' , 0, 2298686215, -3833905889.4143 
@@ -251,15 +229,20 @@ BEGIN
 			)
 		) AS UNPVT;
 
-
 	DECLARE @BRANCH_CODE VARCHAR(15)
 
 	DECLARE @STT INT, @ITEM_CODE VARCHAR(50), @ITEM_NAME NVARCHAR(250), @MA_SO VARCHAR(15), @SOURCE_COL VARCHAR(250)
 		, @SOURCE VARCHAR(250)
 
 	DECLARE @FORMULA NVARCHAR(MAX), @Pos INT, @Token NVARCHAR(100), @Sign NVARCHAR(1) = '+', @CaseList NVARCHAR(MAX) = '', @InList NVARCHAR(MAX) = ''
-
-	--HoangDM: tinh table 1:
+	
+	-- HoangDM: I used a while loop to scan and calculate all the indicators for all units.
+	/* HoangDM: The previously created #FOMULA table already contains formulas for calculating the indicators, 
+			so I will use string concatenation and exec to allow the procedure to automatically calculate based on the declared formulas.
+		The PL report consists of two halves, so I divided it into Table 1 and Table 2.
+	*/
+	-- Table 1:
+	-- HoangDM: tinh table 1:
 	WHILE EXISTS (SELECT 1 FROM #LIST_BRANCH WHERE INSERTED = 0)
 	BEGIN
 		SELECT TOP 1 @BRANCH_CODE = BRANCH_CODE 
@@ -485,7 +468,7 @@ BEGIN
 	
 	DECLARE @FORMULA_T2 VARCHAR(500)
 
-
+	-- Table 2:
 	--HoangDM: Insert cac chi tieu cong thuc Table 2:
 	WHILE EXISTS (SELECT 1 FROM #LIST_BRANCH WHERE INSERTED = 0)
 	BEGIN
@@ -553,8 +536,6 @@ BEGIN
 				GROUP BY BRANCH_CODE, DIVISION_CODE
 				';
 		
-
-
 			EXEC(@STR_EXEC)
 
 			UPDATE #FOMULA 
@@ -593,6 +574,7 @@ BEGIN
 	DELETE FROM RESUL_PL_KHOI_QT
 	WHERE TXN_DATE = @TDATE
 
+	-- HoangDM: i import calculated data in a table result name RESUL_PL_KHOI_QT:
 	SET @STR_EXEC = 
 	'
 		INSERT INTO RESUL_PL_KHOI_QT
@@ -637,6 +619,7 @@ BEGIN
 	'
 	EXEC(@STR_EXEC)
 
+	-- HoangDM: i wrote this to help me copy the result and i can send it to business check it quickly :D 
 	;WITH TEMP AS 
 	(
 		SELECT * 
